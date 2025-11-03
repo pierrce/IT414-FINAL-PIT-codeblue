@@ -24,7 +24,6 @@
   }
 </script>
 
-
 <main>
   <div class="container">
     <!-- Checkbox section on the RIGHT -->
@@ -33,8 +32,8 @@
       {#each rfidData.slice(0, 3) as item}
         <div class="checkbox-item">
           <span>{item.id}. {item.rfid}</span>
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             id="toggle-{item.id}"
             checked={item.status === 1}
             on:change={() => toggleStatus(item.id)}
@@ -49,7 +48,6 @@
       <thead>
         <tr>
           <th>RFID</th>
-          <th>RFID</th>
           <th>Status</th>
           <th>Date & Time</th>
         </tr>
@@ -57,13 +55,12 @@
       <tbody>
         {#each rfidData as item, index}
           <tr>
-            <td>{index + 1}.</td>
-            <td>{item.rfid}</td>
+            <td>{index + 1}. {item.rfid}</td>
             <td>
               {#if item.status === 1}
                 1
               {:else}
-                FRID NOT FOUND
+                RFID NOT FOUND
               {/if}
             </td>
             <td>{item.timestamp}</td>
