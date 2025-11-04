@@ -1,13 +1,13 @@
 <script>
   // Dummy RFID data matching the reference
   let rfidData = [
-    { id: 1, rfid: '88697684', status: 1, timestamp: 'October 10, 2025 1:00PM' },
+    { id: 1, rfid: '88697684', status: 1, timestamp: 'October 10, 2025 2:00PM' },
     { id: 2, rfid: '09780647', status: 1, timestamp: 'October 10, 2025 1:00PM' },
     { id: 3, rfid: '75834600', status: 0, timestamp: 'October 10, 2025 1:00PM' },
     { id: 4, rfid: '90875490', status: 0, timestamp: 'October 10, 2025 1:00PM' },
     { id: 5, rfid: '88697684', status: 1, timestamp: 'October 10, 2025 1:00PM' },
     { id: 6, rfid: '88697684', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 7, rfid: '90875490', status: 0, timestamp: 'October 10, 2025 1:00PM' },
+    { id: 7, rfid: '90875490', status: 0, timestamp: 'imo mama, 2025 1:00PM' },
     { id: 8, rfid: '75834600', status: 0, timestamp: 'October 10, 2025 1:00PM' },
     { id: 9, rfid: '90875490', status: 0, timestamp: 'October 10, 2025 1:00PM' },
     { id: 10, rfid: '75834600', status: 1, timestamp: 'October 10, 2025 1:00PM' },
