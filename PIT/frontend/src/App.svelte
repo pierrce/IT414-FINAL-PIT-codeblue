@@ -1,27 +1,67 @@
 <script>
-  // Dummy RFID data matching the reference
-  let rfidData = [
-    { id: 1, rfid: '88697684', status: 1, timestamp: 'October 10, 2025 2:00PM' },
-    { id: 2, rfid: '09780647', status: 1, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 3, rfid: '75834600', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 4, rfid: '90875490', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 5, rfid: '88697684', status: 1, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 6, rfid: '88697684', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 7, rfid: '90875490', status: 0, timestamp: 'imo mama, 2025 1:00PM' },
-    { id: 8, rfid: '75834600', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 9, rfid: '90875490', status: 0, timestamp: 'October 10, 2025 1:00PM' },
-    { id: 10, rfid: '75834600', status: 1, timestamp: 'October 10, 2025 1:00PM' },
-  ];
+  import { onMount } from 'svelte';
 
-  // Function to toggle status
-  function toggleStatus(id) {
-    rfidData = rfidData.map(item => {
-      if (item.id === id) {
-        return { ...item, status: item.status === 1 ? 0 : 1 };
+  let rfidData = [];
+  let loading = true;
+  let error = null;
+
+  // Fetch RFID data from Laravel API
+  async function fetchRfids() {
+    try {
+      loading = true;
+      const response = await fetch('http://127.0.0.1:8000/api/rfids');
+      if (!response.ok) throw new Error('Failed to fetch data');
+      rfidData = await response.json();
+      loading = false;
+    } catch (err) {
+      error = err.message;
+      loading = false;
+    }
+  }
+
+  // Toggle RFID status
+  async function toggleStatus(id) {
+    const item = rfidData.find(r => r.id === id);
+    const newStatus = item.status === 1 ? 0 : 1;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/rfids/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (response.ok) {
+        // Update local data
+        rfidData = rfidData.map(r => 
+          r.id === id ? { ...r, status: newStatus } : r
+        );
       }
-      return item;
+    } catch (err) {
+      console.error('Error updating status:', err);
+    }
+  }
+
+  // Format timestamp
+  function formatDate(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
     });
   }
+
+  // Fetch data when component loads
+  onMount(() => {
+    fetchRfids();
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(fetchRfids, 5000);
+    return () => clearInterval(interval);
+  });
 </script>
 
 <main>
@@ -29,18 +69,24 @@
     <!-- Checkbox section on the RIGHT -->
     <div class="checkbox-section">
       <h3>RFID</h3>
-      {#each rfidData.slice(0, 3) as item}
-        <div class="checkbox-item">
-          <span>{item.id}. {item.rfid}</span>
-          <input
-            type="checkbox"
-            id="toggle-{item.id}"
-            checked={item.status === 1}
-            on:change={() => toggleStatus(item.id)}
-          />
-          <label for="toggle-{item.id}"></label>
-        </div>
-      {/each}
+      {#if loading}
+        <p style="color: #666;">Loading...</p>
+      {:else if error}
+        <p style="color: red;">{error}</p>
+      {:else}
+        {#each rfidData.slice(0, 3) as item}
+          <div class="checkbox-item">
+            <span>{item.id}. {item.rfid_number}</span>
+            <input
+              type="checkbox"
+              id="toggle-{item.id}"
+              checked={item.status === 1}
+              on:change={() => toggleStatus(item.id)}
+            />
+            <label for="toggle-{item.id}"></label>
+          </div>
+        {/each}
+      {/if}
     </div>
 
     <!-- Table on the LEFT -->
@@ -53,19 +99,27 @@
         </tr>
       </thead>
       <tbody>
-        {#each rfidData as item, index}
-          <tr>
-            <td>{index + 1}. {item.rfid}</td>
-            <td>
-              {#if item.status === 1}
-                1
-              {:else}
-                RFID NOT FOUND
-              {/if}
-            </td>
-            <td>{item.timestamp}</td>
-          </tr>
-        {/each}
+        {#if loading}
+          <tr><td colspan="3" style="text-align: center;">Loading...</td></tr>
+        {:else if error}
+          <tr><td colspan="3" style="text-align: center; color: red;">Error: {error}</td></tr>
+        {:else if rfidData.length === 0}
+          <tr><td colspan="3" style="text-align: center;">No data available</td></tr>
+        {:else}
+          {#each rfidData as item, index}
+            <tr>
+              <td>{index + 1}. {item.rfid_number}</td>
+              <td>
+                {#if item.status === 1}
+                  1
+                {:else}
+                  RFID NOT FOUND
+                {/if}
+              </td>
+              <td>{formatDate(item.created_at)}</td>
+            </tr>
+          {/each}
+        {/if}
       </tbody>
     </table>
   </div>
@@ -94,7 +148,7 @@
   .checkbox-section h3 {
     margin: 0 0 15px 0;
     font-size: 16px;
-    color: #000000;  /* ← Changed to black so it's visible! */
+    color: #000000;
     font-weight: bold;
   }
 
@@ -148,9 +202,9 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  /* When checkbox is checked - change background to red */
+  /* When checkbox is checked - change background to blue */
   .checkbox-item input[type="checkbox"]:checked + label::before {
-    background-color: #3932ff;  /* Red color */
+    background-color: #3932ff;
   }
 
   /* When checkbox is checked - move slider to the right */
