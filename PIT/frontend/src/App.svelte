@@ -1,47 +1,112 @@
 <script>
   import { onMount } from "svelte";
 
-  let rfidData = [];
+  let activeRfids = [];   // ← Only registered RFIDs
+  let logs = [];          // ← Full scan history
   let loading = true;
   let error = null;
+  let isOnline = true;
 
-  const dummyRfids = [
-    { id: 1, rfid_number: "88697684", status: 1, created_at: "2025-10-10T13:00:00" },
-    { id: 2, rfid_number: "09780647", status: 1, created_at: "2025-10-10T13:00:00" },
-    { id: 3, rfid_number: "75834600", status: 0, created_at: "2025-10-10T13:00:00" },
-    { id: 4, rfid_number: "90875490", status: "RFID NOT FOUND", created_at: "2025-10-10T13:00:00" },
-  ];
+  const API_URL = "http://10.16.42.197:8000/api/rfids";
 
+  // Fetch and separate data
   async function fetchRfids() {
     try {
       loading = true;
-      await new Promise((r) => setTimeout(r, 600));
-      rfidData = dummyRfids;
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error('Failed to fetch data');
+
+      const allData = await response.json();
+
+      const registeredGroup = {};
+      allData.forEach(item => {
+        if (item.registered) { // ← FILTER HERE
+          const current = registeredGroup[item.rfid_number];
+          const itemTime = new Date(item.created_at).getTime();
+          if (!current || itemTime > new Date(current.created_at).getTime()) {
+            registeredGroup[item.rfid_number] = item;
+          }
+        }
+      });
+
+      // 2. activeRfids = only registered
+      activeRfids = Object.values(registeredGroup)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+
+      // 3. logs = ALL scans (including unregistered)
+      logs = allData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      // Save to localStorage
+      localStorage.setItem('activeRfids', JSON.stringify(activeRfids));
+      localStorage.setItem('logs', JSON.stringify(logs));
+      localStorage.setItem('lastFetch', new Date().toISOString());
+
+      isOnline = true;
       loading = false;
+      error = null;
     } catch (err) {
-      error = "Failed to fetch RFID data.";
+      console.error('Fetch error:', err);
+
+      const cachedActive = localStorage.getItem('activeRfids');
+      const cachedLogs = localStorage.getItem('logs');
+      if (cachedActive && cachedLogs) {
+        activeRfids = JSON.parse(cachedActive);
+        logs = JSON.parse(cachedLogs);
+        error = 'Offline: ' + formatDate(localStorage.getItem('lastFetch'));
+      } else {
+        error = 'No connection & no cache';
+        activeRfids = [];
+        logs = [];
+      }
       loading = false;
     }
   }
 
-  function toggleStatus(id) {
-    rfidData = rfidData.map((item) =>
-      item.id === id ? { ...item, status: item.status === 1 ? 0 : 1 } : item
+  // Toggle only affects the LATEST log for that RFID
+  async function toggleStatus(rfidNumber) {
+    const latestLog = logs.find(l => l.rfid_number === rfidNumber);
+    if (!latestLog) return;
+
+    const newStatus = latestLog.status === 1 ? 0 : 1;
+
+    // Optimistically update
+    logs = logs.map(l => 
+      l.rfid_number === rfidNumber && l.id === latestLog.id 
+        ? { ...l, status: newStatus } 
+        : l
     );
+
+    try {
+      const response = await fetch(`${API_URL}/${latestLog.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) throw new Error('Update failed');
+      await fetchRfids(); // Refresh both sections
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update. Reverting...');
+      await fetchRfids();
+    }
   }
 
-  function formatDate(date) {
-    return new Date(date).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+  function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true
     });
   }
 
-  onMount(() => fetchRfids());
+  onMount(() => {
+    fetchRfids();
+    const interval = setInterval(fetchRfids, 5000);
+    return () => clearInterval(interval);
+  });
 </script>
 
 <main>
@@ -53,80 +118,83 @@
 
   <div class="container">
     <!-- LEFT PANEL -->
-    <section class="left-panel">
-      <div class="card">
-        <h3>Active RFID</h3>
-        {#if loading}
-          <p>Loading...</p>
-        {:else if error}
-          <p class="error">{error}</p>
-        {:else}
-          {#each rfidData.slice(0, 3) as item, index}
-            <div class="rfid-row">
-              <span class="index">{index + 1}.</span>
-              <span class="rfid-num">{item.rfid_number}</span>
-              <label class="switch">
-                <input
-                  type="checkbox"
-                  checked={item.status === 1}
-                  on:change={() => toggleStatus(item.id)}
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </section>
+<section class="left-panel">
+  <div class="card">
+    <h3>Registered RFID</h3>
+    {#if loading && activeRfids.length === 0}
+      <p class="loading-text">Loading...</p>
+    {:else if error && activeRfids.length === 0}
+      <p class="error">{error}</p>
+    {:else}
+      {#each activeRfids as item, index}
+        <div class="rfid-row">
+          <span class="index">{index + 1}.</span>
+          <span class="rfid-num">{item.rfid_number}</span>
+          <div class="switch disabled">
+           <input
+             type="checkbox"
+             checked={item.status === 1}
+             disabled/>
+            <span class="slider"></span>
+          </div>
+        </div>
+      {/each}
+    {/if}
+  </div>
+</section>
 
     <!-- RIGHT PANEL -->
-    <section class="right-panel">
-      <div class="card">
-        <h3>RFID Logs</h3>
-        <div class="table-wrapper">
-          <table>
-            <thead>
+<section class="right-panel">
+  <div class="card">
+    <div class="card-header">
+      <h3>RFID Logs</h3>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>RFID</th>
+            <th>Status</th>
+            <th>Date &amp; Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#if loading && logs.length === 0}
+            <tr><td colspan="4" class="center">Loading RFID data...</td></tr>
+          {:else if logs.length === 0}
+            <tr><td colspan="4" class="center">No RFID records found</td></tr>
+          {:else}
+            {#each logs as item, i}
               <tr>
-                <th>#</th>
-                <th>RFID</th>
-                <th>Status</th>
-                <th>Date &amp; Time</th>
+                <td>{i + 1}</td>
+                <td class="rfid-cell">{item.rfid_number}</td>
+             <td>
+  {#if item.registered}
+    <span class:found={item.status === 1} class:notfound={item.status === 0}>
+      {item.status}
+    </span>
+  {:else}
+    <span class="notfound">RFID NOT FOUND</span>
+  {/if}
+</td>
+                <td class="nowrap">{formatDate(item.created_at)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#if loading}
-                <tr><td colspan="4" class="center">Loading...</td></tr>
-              {:else}
-                {#each rfidData as item, i}
-                  <tr>
-                    <td>{i + 1}</td>
-                    <td>{item.rfid_number}</td>
-                    <td>
-                      {#if item.status === 1}
-                        <span class="active">1</span>
-                      {:else if item.status === 0}
-                        <span class="inactive">0</span>
-                      {:else}
-                        <span class="notfound">RFID NOT FOUND</span>
-                      {/if}
-                    </td>
-                    <td class="nowrap">{formatDate(item.created_at)}</td>
-                  </tr>
-                {/each}
-              {/if}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
   </div>
 </main>
 
 <style>
   :global(body) {
     margin: 0;
-    font-family: "Poppins", sans-serif;
-    background: #eef2f9;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f4f8;
     color: #1e293b;
   }
 
@@ -142,12 +210,14 @@
   .dashboard-header {
     text-align: center;
     margin-bottom: 20px;
+    position: relative;
   }
 
   .dashboard-header h1 {
     font-size: 1.9rem;
     font-weight: 600;
     color: #1e293b;
+    margin: 0;
   }
 
   .codeblue {
@@ -162,26 +232,33 @@
   .container {
     display: flex;
     width: 90%;
-    max-width: 1300px;
-    background: transparent;
+    max-width: 1400px;
     gap: 25px;
   }
 
   /* CARD */
   .card {
     background: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
-    padding: 22px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    padding: 24px;
   }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
 
   /* LEFT PANEL */
   .left-panel {
-    flex: 0 0 320px;
+    flex: 0 0 340px;
   }
 
   .left-panel h3 {
-    font-size: 1.1rem;
+    font-size: 1.15rem;
     margin-bottom: 16px;
     color: #2563eb;
     font-weight: 600;
@@ -191,37 +268,54 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #f9fbff;
-    border-radius: 10px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-    margin-bottom: 12px;
-    padding: 10px 14px;
-    transition: all 0.3s ease;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    transition: all 0.2s ease;
   }
 
   .rfid-row:hover {
-    background: #eef7ff;
+    background: #eff6ff;
+    border-color: #bfdbfe;
     transform: translateY(-1px);
   }
 
   .rfid-num {
     flex: 1;
-    margin-left: 8px;
+    margin-left: 10px;
     font-weight: 500;
     font-size: 0.95rem;
+    font-family: 'Courier New', monospace;
   }
 
   .index {
-    font-weight: 600;
+    font-weight: 700;
     color: #2563eb;
+    min-width: 25px;
+  }
+
+  .loading-text {
+    text-align: center;
+    color: #64748b;
+    padding: 20px;
+  }
+
+  .error {
+    color: #dc2626;
+    padding: 12px;
+    background: #fee2e2;
+    border-radius: 6px;
+    font-size: 0.9rem;
   }
 
   /* SWITCH */
   .switch {
     position: relative;
     display: inline-block;
-    width: 42px;
-    height: 24px;
+    width: 46px;
+    height: 26px;
   }
 
   .switch input {
@@ -237,29 +331,30 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: #cbd5e1;
     transition: 0.3s;
-    border-radius: 24px;
+    border-radius: 26px;
   }
 
   .slider:before {
     position: absolute;
     content: "";
-    height: 18px;
-    width: 18px;
+    height: 20px;
+    width: 20px;
     left: 3px;
     bottom: 3px;
     background-color: white;
     transition: 0.3s;
     border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   }
 
   input:checked + .slider {
-    background-color: #3b82f6;
+    background-color: #22c55e;
   }
 
   input:checked + .slider:before {
-    transform: translateX(18px);
+    transform: translateX(20px);
   }
 
   /* RIGHT PANEL */
@@ -268,8 +363,8 @@
   }
 
   .right-panel h3 {
-    font-size: 1.1rem;
-    margin-bottom: 16px;
+    font-size: 1.15rem;
+    margin: 0;
     color: #2563eb;
     font-weight: 600;
   }
@@ -282,78 +377,80 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    border-radius: 10px;
-    overflow: hidden;
-    table-layout: fixed;
+    font-size: 0.9rem;
   }
 
   th, td {
-    padding: 12px 14px;
-    font-size: 0.9rem;
+    padding: 14px 12px;
     text-align: left;
-    white-space: nowrap;
   }
 
   th {
     background: #2563eb;
     color: white;
-    font-weight: 500;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  th:first-child {
+    border-top-left-radius: 8px;
+  }
+
+  th:last-child {
+    border-top-right-radius: 8px;
   }
 
   td {
     border-bottom: 1px solid #e2e8f0;
   }
 
-  tr:hover td {
-    background: #f4f9ff;
+  tbody tr:hover {
+    background: #f8fafc;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .rfid-cell {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #1e293b;
   }
 
   .nowrap {
     white-space: nowrap;
   }
 
-  .active {
-    background: #22c55e;
-    color: white;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 6px;
-  }
+  .found {
+  color: #16a34a; /* Green */
+  font-weight: 600;
+}
 
-  .inactive {
-    background: #999;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 6px;
-  }
-
-  .notfound {
-    background: #ef4444;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }
+.notfound {
+  color: #dc2626; /* Red */
+  font-weight: 600;
+}
 
   .center {
     text-align: center;
-    color: #888;
+    color: #94a3b8;
+    font-style: italic;
   }
 
-  /* ✅ Mobile-Friendly Adjustments */
+  /* RESPONSIVE */
   @media (max-width: 900px) {
     .container {
       flex-direction: column;
       width: 95%;
-      gap: 18px;
+      gap: 20px;
     }
 
-    .left-panel, .right-panel {
+    .left-panel {
       width: 100%;
     }
 
-    table, th, td {
+    table {
       font-size: 0.85rem;
     }
 
@@ -364,15 +461,38 @@
 
   @media (max-width: 600px) {
     .dashboard-header h1 {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
     }
 
     .codeblue {
-      font-size: 1.6rem;
+      font-size: 1.8rem;
     }
 
     .container {
       width: 100%;
+      padding: 0 10px;
     }
+
+    .card {
+      padding: 16px;
+    }
+
+    .card-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .switch.disabled {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.switch.disabled input:checked + .slider {
+  background-color: #22c55e;
+}
+
+.switch.disabled .slider {
+  background-color: #cbd5e1;
+}
   }
 </style>

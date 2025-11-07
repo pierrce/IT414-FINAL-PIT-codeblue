@@ -1,24 +1,50 @@
 <?php
-// database/migrations/xxxx_xx_xx_xxxxxx_create_rfids_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 class CreateRfidsTable extends Migration
 {
-    public function up()
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
     {
         Schema::create('rfids', function (Blueprint $table) {
             $table->id();
-            $table->string('rfid_number')->unique(); // Make sure this is unique
-            $table->integer('status')->default(1); // 0 or 1
+            $table->string('rfid_number');
+            $table->integer('status')->default(0); // 0 = NOT FOUND, 1 = FOUND
+            $table->boolean('registered')->default(false); // ← ADDED
             $table->timestamps();
         });
+
+        // INSERT YOUR 2 REGISTERED RFIDs
+        DB::table('rfids')->insert([
+            [
+                'rfid_number' => '22C19E7A',
+                'status' => 0,
+                'registered' => true, // ← MARK AS REGISTERED
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rfid_number' => 'FFC6AADE',
+                'status' => 0,
+                'registered' => true, // ← MARK AS REGISTERED
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
     }
 
-    public function down()
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
     {
         Schema::dropIfExists('rfids');
     }
 }
+    

@@ -9,5 +9,5 @@ class Rfid extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['rfid_number', 'status'];
+    protected $fillable = ['rfid_number', 'status', 'registered'];
 }
