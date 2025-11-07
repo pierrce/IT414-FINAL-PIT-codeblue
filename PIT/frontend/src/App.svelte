@@ -54,65 +54,69 @@
   <div class="container">
     <!-- LEFT PANEL -->
     <section class="left-panel">
-      <h3>Active RFID</h3>
-      {#if loading}
-        <p>Loading...</p>
-      {:else if error}
-        <p class="error">{error}</p>
-      {:else}
-        {#each rfidData.slice(0, 3) as item, index}
-          <div class="rfid-row">
-            <span class="index">{index + 1}.</span>
-            <span class="rfid-num">{item.rfid_number}</span>
-            <label class="switch">
-              <input
-                type="checkbox"
-                checked={item.status === 1}
-                on:change={() => toggleStatus(item.id)}
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
-        {/each}
-      {/if}
+      <div class="card">
+        <h3>Active RFID</h3>
+        {#if loading}
+          <p>Loading...</p>
+        {:else if error}
+          <p class="error">{error}</p>
+        {:else}
+          {#each rfidData.slice(0, 3) as item, index}
+            <div class="rfid-row">
+              <span class="index">{index + 1}.</span>
+              <span class="rfid-num">{item.rfid_number}</span>
+              <label class="switch">
+                <input
+                  type="checkbox"
+                  checked={item.status === 1}
+                  on:change={() => toggleStatus(item.id)}
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+          {/each}
+        {/if}
+      </div>
     </section>
 
     <!-- RIGHT PANEL -->
     <section class="right-panel">
-      <h3>RFID Logs</h3>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>RFID</th>
-              <th>Status</th>
-              <th>Date &amp; Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#if loading}
-              <tr><td colspan="4" class="center">Loading...</td></tr>
-            {:else}
-              {#each rfidData as item, i}
-                <tr>
-                  <td>{i + 1}</td>
-                  <td>{item.rfid_number}</td>
-                  <td>
-                    {#if item.status === 1}
-                      <span class="active">1</span>
-                    {:else if item.status === 0}
-                      <span class="inactive">0</span>
-                    {:else}
-                      <span class="notfound">RFID NOT FOUND</span>
-                    {/if}
-                  </td>
-                  <td class="nowrap">{formatDate(item.created_at)}</td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
+      <div class="card">
+        <h3>RFID Logs</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>RFID</th>
+                <th>Status</th>
+                <th>Date &amp; Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#if loading}
+                <tr><td colspan="4" class="center">Loading...</td></tr>
+              {:else}
+                {#each rfidData as item, i}
+                  <tr>
+                    <td>{i + 1}</td>
+                    <td>{item.rfid_number}</td>
+                    <td>
+                      {#if item.status === 1}
+                        <span class="active">1</span>
+                      {:else if item.status === 0}
+                        <span class="inactive">0</span>
+                      {:else}
+                        <span class="notfound">RFID NOT FOUND</span>
+                      {/if}
+                    </td>
+                    <td class="nowrap">{formatDate(item.created_at)}</td>
+                  </tr>
+                {/each}
+              {/if}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>
@@ -148,28 +152,32 @@
 
   .codeblue {
     color: #2563eb;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    font-size: 2.2rem;
+    text-shadow: 1px 1px 2px rgba(37, 99, 235, 0.2);
   }
 
   /* CONTAINER */
   .container {
     display: flex;
     width: 90%;
-    max-width: 1250px;
+    max-width: 1300px;
+    background: transparent;
+    gap: 25px;
+  }
+
+  /* CARD */
+  .card {
     background: #ffffff;
     border-radius: 16px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+    padding: 22px;
   }
 
   /* LEFT PANEL */
   .left-panel {
-    flex: 0 0 300px;
-    background: #f8fbff;
-    padding: 24px;
-    border-right: 2px solid #edf2f7;
+    flex: 0 0 320px;
   }
 
   .left-panel h3 {
@@ -183,9 +191,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #ffffff;
+    background: #f9fbff;
     border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
     margin-bottom: 12px;
     padding: 10px 14px;
     transition: all 0.3s ease;
@@ -193,7 +201,7 @@
 
   .rfid-row:hover {
     background: #eef7ff;
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
 
   .rfid-num {
@@ -257,7 +265,6 @@
   /* RIGHT PANEL */
   .right-panel {
     flex: 1;
-    padding: 24px;
   }
 
   .right-panel h3 {
@@ -339,23 +346,11 @@
     .container {
       flex-direction: column;
       width: 95%;
+      gap: 18px;
     }
 
-    .left-panel {
+    .left-panel, .right-panel {
       width: 100%;
-      border-right: none;
-      border-bottom: 2px solid #edf2f7;
-      text-align: center;
-    }
-
-    .rfid-row {
-      justify-content: space-between;
-      padding: 12px 18px;
-    }
-
-    .right-panel {
-      width: 100%;
-      padding: 16px;
     }
 
     table, th, td {
@@ -378,12 +373,6 @@
 
     .container {
       width: 100%;
-      border-radius: 0;
-    }
-
-    .rfid-row {
-      flex-direction: row;
-      justify-content: space-between;
     }
   }
 </style>
