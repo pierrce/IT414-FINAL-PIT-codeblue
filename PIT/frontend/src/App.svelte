@@ -7,7 +7,7 @@
   let error = null;
   let isOnline = true;
 
-  const API_URL = "http://10.16.42.197:8000/api/rfids";
+  const API_URL = "http://192.168.1.36:8000/api/rfids";
 
   // Fetch and separate data
   async function fetchRfids() {

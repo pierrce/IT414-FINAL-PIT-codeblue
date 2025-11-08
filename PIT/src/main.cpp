@@ -13,7 +13,7 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 WiFiMulti wifiMulti;
 
 // UPDATED: Your Laravel server IP and port
-const char* serverName = "http://10.16.42.197:8000/api/rfids";
+const char* serverName = "http://192.168.1.36:8000/api/rfids";
 
 // Variables
 String rfidData = "";
@@ -59,7 +59,8 @@ void setup() {
   
   // WiFiMulti setup with your networks
   WiFi.mode(WIFI_STA);
-  wifiMulti.addAP("GIGA NIGGA", "12345678910");
+  wifiMulti.addAP("ParaFiber_CFA8-2.4G", "login1316***");
+  //wifiMulti.addAP("GIGA NIGGA", "12345678910");
   //wifiMulti.addAP("ParaFiber_CFA8-5G", "charlene1997***");
   //wifiMulti.addAP("ElectTest", "12345678");
   //wifiMulti.addAP("Cloud Control Network", "ccv7network");
@@ -74,7 +75,7 @@ void connectToWiFi() {
   Serial.println("Connecting to WiFi (direct)…");
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin("GIGA NIGGA", "12345678910");
+  WiFi.begin("ParaFiber_CFA8-2.4G", "login1316***");
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
