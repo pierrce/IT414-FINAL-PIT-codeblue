@@ -7,7 +7,7 @@
   let error = null;
   let isOnline = true;
 
-  const API_URL = "http://192.168.1.36:8000/api/rfids";
+  const API_URL = "http://192.168.137.144:8000/api/rfids";
 
   // Fetch and separate data
   async function fetchRfids() {
@@ -169,15 +169,15 @@
               <tr>
                 <td>{i + 1}</td>
                 <td class="rfid-cell">{item.rfid_number}</td>
-             <td>
-  {#if item.registered}
-    <span class:found={item.status === 1} class:notfound={item.status === 0}>
-      {item.status}
-    </span>
-  {:else}
-    <span class="notfound">RFID NOT FOUND</span>
-  {/if}
-</td>
+             <td class="status-cell">
+             {#if item.registered}
+              <span class:found={item.status === 1} class:notfound={item.status === 0}>
+               {item.status}
+              </span>
+             {:else}
+               <span class="notfound">RFID NOT FOUND</span>
+               {/if}
+                </td>
                 <td class="nowrap">{formatDate(item.created_at)}</td>
               </tr>
             {/each}
@@ -193,9 +193,15 @@
 <style>
   :global(body) {
     margin: 0;
+    padding: 0;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background: #f0f4f8;
     color: #1e293b;
+    overflow-x: hidden;
+  }
+
+  :global(html) {
+    overflow-x: hidden;
   }
 
   main {
@@ -204,6 +210,9 @@
     align-items: center;
     padding: 25px;
     min-height: 100vh;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
 
   /* HEADER */
@@ -211,6 +220,8 @@
     text-align: center;
     margin-bottom: 20px;
     position: relative;
+    width: 100%;
+    max-width: 100%;
   }
 
   .dashboard-header h1 {
@@ -242,6 +253,8 @@
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     padding: 24px;
+    box-sizing: border-box;
+    width: 100%;
   }
 
   .card-header {
@@ -250,7 +263,6 @@
     align-items: center;
     margin-bottom: 16px;
   }
-
 
   /* LEFT PANEL */
   .left-panel {
@@ -357,6 +369,20 @@
     transform: translateX(20px);
   }
 
+  /* Disabled switch styles */
+  .switch.disabled {
+    pointer-events: none;
+    opacity: 0.85;
+  }
+
+  .switch.disabled input:checked + .slider {
+    background-color: #22c55e;
+  }
+
+  .switch.disabled .slider {
+    background-color: #cbd5e1;
+  }
+
   /* RIGHT PANEL */
   .right-panel {
     flex: 1;
@@ -423,14 +449,26 @@
   }
 
   .found {
-  color: #16a34a; /* Green */
-  font-weight: 600;
-}
+    color: #16a34a;
+    font-weight: 600;
+  }
 
-.notfound {
-  color: #dc2626; /* Red */
-  font-weight: 600;
-}
+  th:nth-child(3), 
+  td:nth-child(3) {
+    min-width: 150px;
+    text-align: center;
+  }
+
+  .notfound {
+    color: #dc2626;
+    font-weight: 600;
+  }
+
+  th:first-child,
+  td:first-child {
+    width: 60px;
+    text-align: center;
+  }
 
   .center {
     text-align: center;
@@ -438,61 +476,82 @@
     font-style: italic;
   }
 
-  /* RESPONSIVE */
   @media (max-width: 900px) {
-    .container {
-      flex-direction: column;
-      width: 95%;
-      gap: 20px;
-    }
-
-    .left-panel {
-      width: 100%;
-    }
-
-    table {
-      font-size: 0.85rem;
-    }
-
-    th, td {
-      padding: 10px 8px;
-    }
+  /* Stack panels and center them horizontally */
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;     /* <-- center stacked children horizontally */
+    justify-content: flex-start;
+    width: 95%;
+    max-width: 900px;
+    gap: 20px;
+    margin: 0 auto;
   }
 
-  @media (max-width: 600px) {
-    .dashboard-header h1 {
-      font-size: 1.5rem;
-    }
+  /* Panels become blocks and get a comfortable width so cards don't touch edges */
+  .left-panel,
+  .right-panel {
+    width: 90%;
+    max-width: 600px;
+    flex: none;              /* ensure flex-basis doesn't interfere */
+    display: block;
+  }
 
-    .codeblue {
-      font-size: 1.8rem;
-    }
+  /* Keep card full width relative to its panel */
+  .card {
+    width: 100%;
+    padding: 16px;
+    box-sizing: border-box;
+  }
 
-    .container {
-      width: 100%;
-      padding: 0 10px;
-    }
+  table {
+    font-size: 0.85rem;
+    width: 100%;
+    border-collapse: collapse;
+  }
 
-    .card {
-      padding: 16px;
-    }
+  th, td {
+    padding: 10px 8px;
+  }
 
-    .card-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 10px;
-    }
-    .switch.disabled {
-  pointer-events: none;
-  opacity: 0.85;
+  /* Remove any negative margins that shift the table left on mobile */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0;        /* removed negative margins */
+    padding: 0;
+    width: 100%;
+  }
 }
 
-.switch.disabled input:checked + .slider {
-  background-color: #22c55e;
-}
+/* Extra-small adjustments for very narrow screens */
+@media (max-width: 600px) {
+  main {
+    padding: 10px 8px;
+  }
 
-.switch.disabled .slider {
-  background-color: #cbd5e1;
-}
+  .dashboard-header h1 { font-size: 1.2rem; }
+  .codeblue { font-size: 1.5rem; }
+
+  /* Slightly narrower panels on tiny screens for breathing room */
+  .left-panel,
+  .right-panel {
+    width: 94%;
+    max-width: 520px;
+  }
+
+  .card { padding: 14px; }
+
+  table { font-size: 0.75rem; }
+
+  th, td { padding: 8px 6px; white-space: nowrap; }
+
+  /* Allow the last column (date/time) to wrap */
+  td:last-child {
+    white-space: normal;
+    min-width: 90px;
+    font-size: 0.72rem;
+  }
   }
 </style>
