@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Rfid;
 use Illuminate\Http\Request;
+use PhpMqtt\Client\Facades\MQTT;
 
 class RfidController extends Controller
 {
@@ -46,9 +47,17 @@ class RfidController extends Controller
             'registered' => $isRegistered  // ← CRITICAL
         ]);
 
+        // ✅ PUBLISH TO MQTT (only status: 1 or 0)
+        try {
+            MQTT::publish('RFID_LOGIN', (string)$newStatus, 0, false);
+        } catch (\Exception $e) {
+            \Log::error('MQTT Publish Failed: ' . $e->getMessage());
+        }
+
         return response()->json([
             'message' => $isRegistered ? 'Scan logged' : 'Unregistered scan logged',
-            'rfid' => $log
+            'rfid' => $log,
+            'mqtt_status' => $newStatus  // Optional: show what was published
         ], 201);
     }
 
@@ -58,6 +67,13 @@ class RfidController extends Controller
         $rfid = Rfid::findOrFail($id);
         $rfid->status = $request->status;
         $rfid->save();
+
+        // ✅ PUBLISH TO MQTT when manually toggled
+        try {
+            MQTT::publish('RFID_LOGIN', (string)$rfid->status, 0, false);
+        } catch (\Exception $e) {
+            \Log::error('MQTT Publish Failed: ' . $e->getMessage());
+        }
 
         return response()->json($rfid);
     }
