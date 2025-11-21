@@ -12,12 +12,12 @@
 MFRC522 rfid(SS_PIN, RST_PIN);
 
 // WiFi & API
-const char* ssid = "123";
-const char* password = "12345678";
-const char* serverName = "http://10.251.61.166:8000/api/rfids";
+const char* ssid = "GIGGA NIGGA";
+const char* password = "12345678910";
+const char* serverName = "http://10.249.12.166:8000/api/rfids";
 
 // MQTT
-const char* mqtt_server = "10.251.61.166";
+const char* mqtt_server = "10.249.12.166";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "RFID_LOGIN";
 
@@ -36,6 +36,7 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
+  // Initialize SPI for MFRC522
   SPI.begin(18, 19, 23); // SCK, MISO, MOSI
   rfid.PCD_Init();
   Serial.println("RFID Scanner Ready.");
@@ -51,7 +52,6 @@ void loop() {
 
   static bool waitingForCard = true;
 
-  // Show scan prompt only once while waiting
   if (waitingForCard) {
     Serial.print("Waiting for RFID on WiFi: ");
     Serial.println(WiFi.SSID());
@@ -65,7 +65,8 @@ void loop() {
         if (rfid.uid.uidByte[i] < 0x10) tag += "0"; // pad single hex digits
         tag += String(rfid.uid.uidByte[i], HEX);
       }
-      tag.toUpperCase(); // store uppercase
+
+      tag.toUpperCase(); // in-place conversion, fixed
 
       Serial.print("RFID TAG: ");
       Serial.println(tag);
@@ -74,7 +75,7 @@ void loop() {
 
       rfid.PICC_HaltA();
       lastRead = millis();
-      waitingForCard = true; // show prompt again for next scan
+      waitingForCard = true;
     }
   }
 
@@ -92,8 +93,6 @@ void connectWiFi() {
   }
 
   Serial.println("\nWiFi Connected.");
-  Serial.print("Connected to WiFi network: ");
-  Serial.println(WiFi.SSID());
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
 }
@@ -105,7 +104,9 @@ void connectMQTT() {
       Serial.println("Connected!");
       mqttClient.subscribe(mqtt_topic);
     } else {
-      Serial.println("Failed. Retrying...");
+      Serial.print("Failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(". Retrying in 2s...");
       delay(2000);
     }
   }
@@ -132,11 +133,11 @@ void sendRFID(String tag) {
     String response = http.getString();
     Serial.println("API Response: " + response);
 
+    // Optional: parse status from JSON if present
     int idx = response.indexOf("\"status\":");
     if (idx != -1) {
       int status = response.substring(idx + 9, idx + 10).toInt();
 
-      // Publish to MQTT
       String msg = String(status);
       mqttClient.publish(mqtt_topic, msg.c_str());
 

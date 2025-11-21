@@ -6,7 +6,7 @@
   let loading = true;
   let error = null;
 
-  const API_URL = "http://10.251.61.166:8000/api/rfids";
+  const API_URL = "http://10.249.12.166:8000/api/rfids";
 
   async function fetchRfids() {
     try {
