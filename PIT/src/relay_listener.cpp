@@ -7,11 +7,11 @@
 #define LED_PIN 2
 
 // WiFi credentials
-const char* ssid = "GIGGA NIGGA";
+const char* ssid = "GIGA NIGGA";
 const char* password = "12345678910";
-
+//("Cloud Control Network", "ccv7network")
 // MQTT broker
-const char* mqtt_server = "10.249.12.166";
+const char* mqtt_server = "10.235.220.197";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "RFID_LOGIN";
 
@@ -27,15 +27,15 @@ void connectWiFi();
 void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 
-// Helper functions for active LOW relay
+// Helper functions for active HIGH relay (inverted for NO terminal)
 void relayOn() {
-  digitalWrite(RELAY_PIN, LOW); // Active LOW: LOW = ON
-  digitalWrite(LED_PIN, HIGH);  // LED normal HIGH = ON
+  digitalWrite(RELAY_PIN, HIGH); // Active HIGH: HIGH = ON (NO closes)
+  digitalWrite(LED_PIN, HIGH);   // LED normal HIGH = ON
   Serial.println("✅ Relay/LED ON");
 }
 
 void relayOff() {
-  digitalWrite(RELAY_PIN, HIGH); // Active LOW: HIGH = OFF
+  digitalWrite(RELAY_PIN, LOW);  // Active HIGH: LOW = OFF (NO opens)
   digitalWrite(LED_PIN, LOW);
   Serial.println("❌ Relay/LED OFF");
 }
@@ -166,19 +166,52 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (unsigned int i = 0; i < length; i++) message += (char)payload[i];
 
-  Serial.print("\n📩 MQTT Message [");
-  Serial.print(topic);
-  Serial.print("]: ");
-  Serial.println(message);
+  Serial.print("\n📩 MQTT Message Received!");
+  Serial.print("\n   Topic: ");
+  Serial.println(topic);
+  Serial.print("   Payload: '");
+  Serial.print(message);
+  Serial.println("'");
+  Serial.print("   Length: ");
+  Serial.println(length);
+  Serial.print("   Expected Topic: ");
+  Serial.println(mqtt_topic);
 
-  // Toggle relay/LED based on message
+  // Toggle relay/LED based on status value
   if (String(topic) == mqtt_topic) {
-    if (message == "1") {
+    Serial.println("   ✅ Topic matches!");
+    
+    // Try multiple parsing methods
+    int status = message.toInt();
+    Serial.print("   Parsed status (toInt): ");
+    Serial.println(status);
+    
+    // Check raw character
+    if (length > 0) {
+      Serial.print("   First character: '");
+      Serial.print((char)payload[0]);
+      Serial.print("' (ASCII: ");
+      Serial.print((int)payload[0]);
+      Serial.println(")");
+    }
+    
+    // More flexible matching
+    message.trim(); // Remove whitespace
+    
+    if (message == "1" || status == 1 || (length == 1 && payload[0] == '1')) {
+      Serial.println("🎉 RFID REGISTERED & ACTIVE - TURNING ON!");
       relayOn();
-    } else if (message == "0") {
+    } else if (message == "0" || status == 0 || (length == 1 && payload[0] == '0')) {
+      Serial.println("🚫 RFID NOT REGISTERED OR INACTIVE - TURNING OFF!");
       relayOff();
     } else {
-      Serial.println("⚠️ Unknown MQTT message");
+      Serial.print("⚠️ Unknown status value: '");
+      Serial.print(message);
+      Serial.println("'");
+      relayOff(); // Default to OFF for unknown status
     }
+  } else {
+    Serial.println("   ❌ Topic does NOT match!");
   }
+  Serial.println();
 }
