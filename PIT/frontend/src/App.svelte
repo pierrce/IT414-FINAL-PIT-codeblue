@@ -6,7 +6,7 @@
   let loading = true;
   let error = null;
 
-  const API_URL = "http://10.235.220.197:8000/api/rfids";
+  const API_URL = "http://10.197.198.197:8000/api/rfids";
 
   async function fetchRfids() {
     try {
@@ -79,7 +79,7 @@
 
   onMount(() => {
     fetchRfids();
-    const interval = setInterval(fetchRfids, 5000);
+    const interval = setInterval(fetchRfids, 1000);
     return () => clearInterval(interval);
   });
 </script>

@@ -9,9 +9,8 @@
 // WiFi credentials
 const char* ssid = "GIGA NIGGA";
 const char* password = "12345678910";
-//("Cloud Control Network", "ccv7network")
-// MQTT broker
-const char* mqtt_server = "10.235.220.197";
+
+const char* mqtt_server = "10.197.198.197";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "RFID_LOGIN";
 

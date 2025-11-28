@@ -14,10 +14,9 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 // WiFi & API - UPDATE THESE TO YOUR NETWORK
 const char* ssid = "GIGA NIGGA";
 const char* password = "12345678910";
-const char* serverName = "http://10.235.220.197:8000/api/rfids";
-//("Cloud Control Network", "ccv7network")
-// MQTT Configuration
-const char* mqtt_server = "10.235.220.197";
+const char* serverName = "http://10.197.198.197:8000/api/rfids";
+
+const char* mqtt_server = "10.197.198.197";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "RFID_LOGIN";
 
@@ -26,7 +25,7 @@ PubSubClient mqttClient(espClient);
 
 // RFID timing
 unsigned long lastRead = 0;
-const unsigned long readDelay = 2000;
+const unsigned long readDelay = 1000;
 bool wifiConnected = false;
 bool mqttConnected = false;
 
