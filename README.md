@@ -49,6 +49,11 @@ export default writable(0)
 
 Github repo - IT414-FINAL-PIT-codeblue
 
+get the repo link for cloning
+
+then go to the github desktop then click add then 'clone repository'
+
+make sure the folder is empty, if not locate the github folder and create a new one then go back to the github desktop and add 'input the link repo' then choose the folder you created
 
 FOR LARAVEL BACKEND:
 
@@ -73,3 +78,17 @@ NOTE: Make sure you are inside the /frontend so run the cd frontend first
 1.1 run "npm install"
 
 1.2 npm run dev -- --host
+
+
+MAKE SURE you open a cmd and run 'ipconfig' then get the IPV4 address and change the app.svelte and the relay_listener.cpp, rfid_scanner.cpp
+
+for mosquitto 
+
+search cmd and run as administrator
+
+1.1 cd C:\mosquitto
+
+1.2 mosquitto -v -c mosquitto_config.txt
+
+
+make sure the platformio the COM of the listener and scanner will be changed depening what is the assign com in the device manager
