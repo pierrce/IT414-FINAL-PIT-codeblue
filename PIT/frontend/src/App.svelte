@@ -5,18 +5,19 @@
   let logs = [];
   let loading = true;
   let error = null;
+  let lastUpdate = null;
 
   const API_URL = "http://10.197.198.197:8000/api/rfids";
 
   async function fetchRfids() {
     try {
-      loading = true;
       const response = await fetch(API_URL);
       if (!response.ok) throw new Error('Failed to fetch data');
 
       const allData = await response.json();
       const registeredGroup = {};
 
+      // Process registered RFIDs only
       allData.forEach(item => {
         if (item.registered) {
           const current = registeredGroup[item.rfid_number];
@@ -27,31 +28,31 @@
         }
       });
 
+      // ⚡ INSTANT STATE UPDATES - NO localStorage operations!
       activeRfids = Object.values(registeredGroup)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5);
 
       logs = allData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      localStorage.setItem('activeRfids', JSON.stringify(activeRfids));
-      localStorage.setItem('logs', JSON.stringify(logs));
-      localStorage.setItem('lastFetch', new Date().toISOString());
+      // ⚡ REMOVED ALL localStorage operations that cause delays:
+      // localStorage.setItem('activeRfids', JSON.stringify(activeRfids));
+      // localStorage.setItem('logs', JSON.stringify(logs));
+      // localStorage.setItem('lastFetch', new Date().toISOString());
 
+      lastUpdate = new Date(); // Track last successful update
       loading = false;
       error = null;
+
     } catch (err) {
       console.error('Fetch error:', err);
-      const cachedActive = localStorage.getItem('activeRfids');
-      const cachedLogs = localStorage.getItem('logs');
       
-      if (cachedActive && cachedLogs) {
-        activeRfids = JSON.parse(cachedActive);
-        logs = JSON.parse(cachedLogs);
-        error = 'Offline: ' + formatDate(localStorage.getItem('lastFetch'));
+      // ⚡ REMOVED localStorage fallback - just show error
+      // If we can't connect, show error but keep existing data
+      if (activeRfids.length === 0 && logs.length === 0) {
+        error = 'Cannot connect to server';
       } else {
-        error = 'No connection & no cache';
-        activeRfids = [];
-        logs = [];
+        error = 'Connection lost - showing cached data';
       }
       loading = false;
     }
@@ -78,8 +79,12 @@
   }
 
   onMount(() => {
-    fetchRfids();
-    const interval = setInterval(fetchRfids, 1000);
+    fetchRfids(); // Initial fetch
+    
+    // ⚡ REAL-TIME POLLING: 100ms interval (10 times per second!)
+    // Changed from 1000ms to 100ms for instant updates
+    const interval = setInterval(fetchRfids, 100);
+    
     return () => clearInterval(interval);
   });
 </script>
@@ -206,9 +211,40 @@
 
   .dashboard-header h1 {
     font-size: 1.9rem;
-    font-weight: 600;
+    fontWeight: 600;
     color: #1e293b;
     margin: 0;
+  }
+
+  /* ⚡ NEW: Live indicator */
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: #16a34a;
+    font-weight: 600;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.2);
+    }
   }
 
   .subtitle-mobile { display: inline; }

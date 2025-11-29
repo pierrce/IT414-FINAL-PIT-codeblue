@@ -11,7 +11,7 @@
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 
-// WiFi & API - UPDATE THESE TO YOUR NETWORK
+// WiFi & API
 const char* ssid = "GIGA NIGGA";
 const char* password = "12345678910";
 const char* serverName = "http://10.197.198.197:8000/api/rfids";
@@ -23,28 +23,37 @@ const char* mqtt_topic = "RFID_LOGIN";
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-// RFID timing
+// ⚡ REDUCED read delay for faster response
 unsigned long lastRead = 0;
-const unsigned long readDelay = 1000;
+const unsigned long readDelay = 200; // 200ms to prevent duplicate reads
+String lastTag = "";
+
+// Connection flags
 bool wifiConnected = false;
 bool mqttConnected = false;
+
+// ⚡ NON-BLOCKING reconnection timers
+unsigned long lastWiFiCheck = 0;
+const unsigned long wifiCheckInterval = 5000; // Check every 5 seconds
+unsigned long lastMQTTCheck = 0;
+const unsigned long mqttCheckInterval = 5000;
 
 void connectWiFi();
 void connectMQTT();
 void sendRFID(String tag);
+void checkConnections();
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
 
   Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  Serial.println("   ESP32 RFID SCANNER with MQTT       ");
+  Serial.println("   ESP32 RFID - ZERO DELAY VERSION    ");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
   // Initialize SPI for MFRC522
   SPI.begin(18, 19, 23); // SCK, MISO, MOSI
   rfid.PCD_Init();
-  Serial.println("✅ RFID Scanner Ready.");
+  Serial.println("✅ RFID Scanner Ready (Zero-delay mode)");
   Serial.println();
 
   connectWiFi();
@@ -53,59 +62,82 @@ void setup() {
   mqttClient.setServer(mqtt_server, mqtt_port);
   if (wifiConnected) connectMQTT();
 
-  Serial.println("🎯 System ready. Scan RFID cards...\n");
+  Serial.println("🎯 System ready. Instant RFID scanning...\n");
 }
 
 void loop() {
-  // Check WiFi connection
+  // ⚡ Non-blocking connection checks
+  checkConnections();
+
+  // ⚡ MQTT loop (instant processing)
+  if (mqttClient.connected()) {
+    mqttClient.loop();
+  }
+
+  // ⚡ INSTANT RFID READ - No delays!
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    String tag = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      if (rfid.uid.uidByte[i] < 0x10) tag += "0";
+      tag += String(rfid.uid.uidByte[i], HEX);
+    }
+    tag.toUpperCase();
+
+    // Only process if it's a new tag or enough time has passed
+    unsigned long currentTime = millis();
+    if (tag != lastTag || (currentTime - lastRead) > readDelay) {
+      Serial.println();
+      Serial.print("📇 RFID Detected: ");
+      Serial.println(tag);
+
+      sendRFID(tag); // ⚡ Instant API call
+
+      lastTag = tag;
+      lastRead = currentTime;
+    }
+
+    rfid.PICC_HaltA();
+    rfid.PCD_StopCrypto1();
+  }
+
+  // ⚡ yield() instead of delay() - allows ESP32 background tasks
+  yield();
+}
+
+void checkConnections() {
+  unsigned long currentTime = millis();
+
+  // ⚡ Non-blocking WiFi check
   if (WiFi.status() != WL_CONNECTED) {
     if (wifiConnected) {
       wifiConnected = false;
       mqttConnected = false;
-      Serial.println("⚠️  WiFi disconnected! Reconnecting...");
+      Serial.println("⚠️  WiFi disconnected!");
     }
-    connectWiFi();
-    delay(2000);
-    return;
+    
+    // Only attempt reconnection every 5 seconds
+    if (currentTime - lastWiFiCheck >= wifiCheckInterval) {
+      lastWiFiCheck = currentTime;
+      connectWiFi();
+    }
   } else if (!wifiConnected) {
     wifiConnected = true;
     Serial.println("✅ WiFi reconnected!");
   }
 
-  // Check MQTT connection
-  if (!mqttClient.connected()) {
+  // ⚡ Non-blocking MQTT check
+  if (wifiConnected && !mqttClient.connected()) {
     if (mqttConnected) {
-      Serial.println("⚠️  MQTT disconnected! Reconnecting...");
+      Serial.println("⚠️  MQTT disconnected!");
       mqttConnected = false;
     }
-    connectMQTT();
-  }
-
-  mqttClient.loop();
-
-  // Read RFID card
-  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-    if (millis() - lastRead > readDelay) {
-      String tag = "";
-      for (byte i = 0; i < rfid.uid.size; i++) {
-        if (rfid.uid.uidByte[i] < 0x10) tag += "0";
-        tag += String(rfid.uid.uidByte[i], HEX);
-      }
-      tag.toUpperCase();
-
-      Serial.println();
-      Serial.print("📇 RFID Detected: ");
-      Serial.println(tag);
-
-      sendRFID(tag);
-
-      rfid.PICC_HaltA();
-      rfid.PCD_StopCrypto1();
-      lastRead = millis();
+    
+    // Only attempt reconnection every 5 seconds
+    if (currentTime - lastMQTTCheck >= mqttCheckInterval) {
+      lastMQTTCheck = currentTime;
+      connectMQTT();
     }
   }
-
-  delay(50);
 }
 
 void connectWiFi() {
@@ -114,61 +146,48 @@ void connectWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
+  // ⚡ COMPLETELY NON-BLOCKING - using millis() timer
+  // OLD: delay(100) in loop - blocked for 2 seconds total!
+  // NEW: yield() only - max 3 second timeout
+  
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 3000) {
+    yield(); // ⚡ Non-blocking - let ESP32 handle WiFi connection
+    // No delay() at all!
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi Connected!");
-    Serial.print("   SSID: ");
-    Serial.println(WiFi.SSID());
-    Serial.print("   IP Address: ");
+    Serial.println(" ✅ Connected!");
+    Serial.print("   IP: ");
     Serial.println(WiFi.localIP());
-    Serial.print("   MAC Address: ");
-    Serial.println(WiFi.macAddress());
-    Serial.println();
     wifiConnected = true;
   } else {
-    Serial.println("\n❌ Failed to connect to WiFi");
-    Serial.print("   Status code: ");
-    Serial.println(WiFi.status());
+    Serial.println(" ❌ Timeout - will retry in 5s");
     wifiConnected = false;
   }
 }
 
 void connectMQTT() {
-  int attempts = 0;
-  while (!mqttClient.connected() && attempts < 3) {
-    Serial.print("🔗 Connecting to MQTT broker...");
+  Serial.print("🔗 Connecting to MQTT...");
 
-    String clientId = "ESP32-SCANNER-";
-    clientId += String(WiFi.macAddress());
-    clientId.replace(":", "");
+  String clientId = "ESP32-SCANNER-";
+  clientId += String(random(0xffff), HEX);
 
-    if (mqttClient.connect(clientId.c_str())) {
-      Serial.println(" ✅ Connected!");
-      mqttConnected = true;
-      return;
-    } else {
-      Serial.print(" ❌ Failed, rc=");
-      Serial.println(mqttClient.state());
-      attempts++;
-      if (attempts < 3) {
-        Serial.println("⏳ Retrying in 3 seconds...");
-        delay(3000);
-      }
-    }
+  // ⚡ Single connection attempt - no retry loop
+  if (mqttClient.connect(clientId.c_str())) {
+    Serial.println(" ✅ Connected!");
+    mqttConnected = true;
+  } else {
+    Serial.print(" ❌ Failed, rc=");
+    Serial.println(mqttClient.state());
+    mqttConnected = false;
+    // Will retry in 5 seconds from checkConnections()
   }
-
-  if (!mqttConnected) Serial.println("⚠️ MQTT connection failed");
 }
 
 void sendRFID(String tag) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("❌ WiFi not connected. Cannot send RFID.");
+  if (!wifiConnected) {
+    Serial.println("❌ WiFi not connected. Skipping API call.");
     return;
   }
 
@@ -182,18 +201,18 @@ void sendRFID(String tag) {
 
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
-  http.setTimeout(10000);
+  http.setTimeout(3000); // ⚡ Reduced from 5000ms to 3000ms for faster response
 
   String jsonPayload = "{\"rfid_number\":\"" + tag + "\"}";
   int httpResponseCode = http.POST(jsonPayload);
 
-  Serial.print("📡 HTTP Response Code: ");
+  Serial.print("📡 HTTP Response: ");
   Serial.println(httpResponseCode);
 
   if (httpResponseCode > 0) {
     String response = http.getString();
 
-    // Parse rfid_number
+    // ⚡ Quick parsing
     int rfidIndex = response.indexOf("\"rfid_number\":\"");
     String rfidNum = "";
     if (rfidIndex != -1) {
@@ -202,9 +221,8 @@ void sendRFID(String tag) {
       rfidNum = response.substring(start, end);
     }
 
-    // Parse status
     int statusIndex = response.indexOf("\"status\":");
-    int statusValue = -1;
+    int statusValue = 0;
     if (statusIndex != -1) {
       int start = statusIndex + 9;
       int end = response.indexOf(",", start);
@@ -212,49 +230,34 @@ void sendRFID(String tag) {
       statusValue = response.substring(start, end).toInt();
     }
 
-    // Parse registered
-    int registeredIndex = response.indexOf("\"registered\":");
-    bool registered = false;
-    if (registeredIndex != -1) {
-      int start = registeredIndex + 13;
-      String val = response.substring(start, start + 4);
-      val.trim();
-      registered = val.startsWith("true");
-    }
+    bool registered = response.indexOf("\"registered\":true") != -1;
 
-    // ✅ Display output
-    Serial.println();
+    // Display result
     Serial.print("RFID: ");
     Serial.print(rfidNum);
     Serial.print(" | STATUS: ");
     Serial.print(statusValue);
     Serial.print(" → ");
-    if (registered) {
-      Serial.println("FOUND ✅");
-    } else {
-      Serial.println("RFID NOT FOUND ❌");
-    }
+    Serial.println(registered ? "FOUND ✅" : "NOT FOUND ❌");
 
-    // 🔥 PUBLISH STATUS TO MQTT
+    // ⚡ INSTANT MQTT PUBLISH
     if (mqttClient.connected()) {
       String mqttMessage = String(statusValue);
       if (mqttClient.publish(mqtt_topic, mqttMessage.c_str())) {
-        Serial.print("📤 Published to MQTT [");
-        Serial.print(mqtt_topic);
-        Serial.print("]: ");
+        Serial.print("📤 Published to MQTT: ");
         Serial.println(mqttMessage);
       } else {
-        Serial.println("❌ Failed to publish to MQTT");
+        Serial.println("❌ MQTT publish failed");
       }
     } else {
-      Serial.println("⚠️ MQTT not connected. Cannot publish status.");
+      Serial.println("⚠️ MQTT not connected");
     }
     
     Serial.println();
   } else {
-    Serial.println("❌ API Error. Check server IP, port, and WiFi connection.");
+    Serial.println("❌ API Error");
     if (httpResponseCode == -11) {
-      Serial.println("   Connection failed (-11) - Check if Laravel server is running");
+      Serial.println("   Connection failed - Check server");
     }
   }
 

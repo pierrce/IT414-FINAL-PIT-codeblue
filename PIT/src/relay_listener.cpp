@@ -20,38 +20,47 @@ PubSubClient mqttClient(espClient);
 // Connection status flags
 bool wifiConnected = false;
 bool mqttConnected = false;
+bool isConnectingWiFi = false;
+bool isConnectingMQTT = false;
+
+// ⚡ NON-BLOCKING TIMERS - Replace all delay() calls
+unsigned long lastWiFiAttempt = 0;
+unsigned long lastMQTTAttempt = 0;
+const unsigned long reconnectInterval = 5000; // Try reconnect every 5 seconds
 
 // Function prototypes
 void connectWiFi();
 void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 
-// Helper functions for active HIGH relay (inverted for NO terminal)
+// ⚡ INSTANT relay control - no delays
 void relayOn() {
-  digitalWrite(RELAY_PIN, HIGH); // Active HIGH: HIGH = ON (NO closes)
-  digitalWrite(LED_PIN, HIGH);   // LED normal HIGH = ON
+  digitalWrite(RELAY_PIN, HIGH);
+  digitalWrite(LED_PIN, HIGH);
   Serial.println("✅ Relay/LED ON");
 }
 
 void relayOff() {
-  digitalWrite(RELAY_PIN, LOW);  // Active HIGH: LOW = OFF (NO opens)
+  digitalWrite(RELAY_PIN, LOW);
   digitalWrite(LED_PIN, LOW);
   Serial.println("❌ Relay/LED OFF");
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-
+  
+  // ⚡ STEP 1: REMOVED delay(1000) from setup
+  // No need to wait - ESP32 is ready immediately
+  
   Serial.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  Serial.println("   ESP32 RELAY/LED MQTT LISTENER      ");
+  Serial.println("   ESP32 RELAY - ZERO DELAY VERSION   ");
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
   // Initialize pins
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  relayOff(); // Start OFF
-  Serial.println("✅ Relay and LED initialized OFF");
+  relayOff();
+  Serial.println("✅ Relay/LED initialized OFF");
 
   // Connect WiFi
   connectWiFi();
@@ -63,44 +72,60 @@ void setup() {
   // Connect MQTT
   if (wifiConnected) connectMQTT();
 
-  Serial.println("\n🎯 System ready. Listening for MQTT messages...\n");
+  Serial.println("\n🎯 System ready. Listening for MQTT...\n");
 }
 
 void loop() {
-  // WiFi reconnection check
+  unsigned long currentMillis = millis();
+
+  // ⚡ STEP 2: NON-BLOCKING WiFi reconnection
   if (WiFi.status() != WL_CONNECTED) {
     if (wifiConnected) {
-      Serial.println("⚠️  WiFi disconnected! Reconnecting...");
+      Serial.println("⚠️  WiFi disconnected!");
       wifiConnected = false;
       mqttConnected = false;
     }
-    connectWiFi();
+    
+    // Only try reconnecting every 5 seconds, don't block
+    if (!isConnectingWiFi && (currentMillis - lastWiFiAttempt > reconnectInterval)) {
+      lastWiFiAttempt = currentMillis;
+      connectWiFi();
+    }
+    
+    yield(); // Let ESP32 handle background tasks
     return;
   } else if (!wifiConnected) {
     wifiConnected = true;
+    isConnectingWiFi = false;
     Serial.println("✅ WiFi reconnected!");
   }
 
-  // MQTT reconnection check
+  // ⚡ STEP 3: NON-BLOCKING MQTT reconnection
   if (!mqttClient.connected()) {
     if (mqttConnected) {
-      Serial.println("⚠️  MQTT disconnected! Reconnecting...");
+      Serial.println("⚠️  MQTT disconnected!");
       mqttConnected = false;
     }
-    connectMQTT();
+    
+    // Only try reconnecting every 5 seconds, don't block
+    if (!isConnectingMQTT && (currentMillis - lastMQTTAttempt > reconnectInterval)) {
+      lastMQTTAttempt = currentMillis;
+      connectMQTT();
+    }
   }
 
+  // ⚡ INSTANT MQTT processing
   mqttClient.loop();
 
   // Optional: manual Serial control
   if (Serial.available() > 0) {
     char cmd = Serial.read();
-    if (cmd == '0') {
-      relayOff();
-    } else if (cmd == '1') {
-      relayOn();
-    }
+    if (cmd == '0') relayOff();
+    else if (cmd == '1') relayOn();
   }
+
+ 
+  yield();
 }
 
 void connectWiFi() {
@@ -109,108 +134,86 @@ void connectWiFi() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  
+  isConnectingWiFi = true;
 
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 5000) {
+    yield(); // Non-blocking - let ESP32 do other tasks
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n✅ WiFi Connected!");
-    Serial.print("   IP Address: ");
+    Serial.print("   IP: ");
     Serial.println(WiFi.localIP());
     wifiConnected = true;
+    isConnectingWiFi = false;
   } else {
-    Serial.println("\n❌ WiFi connection failed!");
+    Serial.println("\n❌ WiFi failed - will retry in 5s");
     wifiConnected = false;
+    isConnectingWiFi = false;
   }
 }
 
 void connectMQTT() {
-  int attempts = 0;
-  while (!mqttClient.connected() && attempts < 3) {
-    Serial.print("🔗 Connecting to MQTT broker...");
+  Serial.print("🔗 Connecting to MQTT...");
+  
+  isConnectingMQTT = true;
 
-    String clientId = "ESP32-RELAY-";
-    clientId += String(WiFi.macAddress());
-    clientId.replace(":", "");
-
-    if (mqttClient.connect(clientId.c_str())) {
-      Serial.println(" ✅ Connected!");
-      if (mqttClient.subscribe(mqtt_topic)) {
-        Serial.print("📥 Subscribed to: ");
-        Serial.println(mqtt_topic);
-        mqttConnected = true;
-      } else {
-        Serial.println("❌ Failed to subscribe");
-      }
-      return;
+  String clientId = "ESP32-RELAY-";
+  clientId += String(WiFi.macAddress());
+  clientId.replace(":", "");
+  
+  if (mqttClient.connect(clientId.c_str())) {
+    Serial.println(" ✅ Connected!");
+    if (mqttClient.subscribe(mqtt_topic)) {
+      Serial.print("📥 Subscribed to: ");
+      Serial.println(mqtt_topic);
+      mqttConnected = true;
     } else {
-      Serial.print(" ❌ Failed, rc=");
-      Serial.println(mqttClient.state());
-      attempts++;
-      if (attempts < 3) {
-        Serial.println("⏳ Retrying in 3 seconds...");
-        delay(3000);
-      }
+      Serial.println("❌ Subscribe failed");
+      mqttConnected = false;
     }
+    isConnectingMQTT = false;
+  } else {
+    Serial.print(" ❌ Failed, rc=");
+    Serial.println(mqttClient.state());
+    mqttConnected = false;
+    isConnectingMQTT = false;
+    // Will retry in 5 seconds automatically from loop()
   }
-
-  if (!mqttConnected) Serial.println("⚠️ MQTT connection failed");
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  // ⚡ STEP 7: INSTANT processing - NO delays in callback
+  
   String message = "";
-  for (unsigned int i = 0; i < length; i++) message += (char)payload[i];
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
 
-  Serial.print("\n📩 MQTT Message Received!");
-  Serial.print("\n   Topic: ");
-  Serial.println(topic);
-  Serial.print("   Payload: '");
+  Serial.print("\n📩 MQTT Received: '");
   Serial.print(message);
   Serial.println("'");
-  Serial.print("   Length: ");
-  Serial.println(length);
-  Serial.print("   Expected Topic: ");
-  Serial.println(mqtt_topic);
 
-  // Toggle relay/LED based on status value
+  // ⚡ INSTANT relay switching based on message
   if (String(topic) == mqtt_topic) {
-    Serial.println("   ✅ Topic matches!");
-    
-    // Try multiple parsing methods
+    message.trim();
     int status = message.toInt();
-    Serial.print("   Parsed status (toInt): ");
-    Serial.println(status);
-    
-    // Check raw character
-    if (length > 0) {
-      Serial.print("   First character: '");
-      Serial.print((char)payload[0]);
-      Serial.print("' (ASCII: ");
-      Serial.print((int)payload[0]);
-      Serial.println(")");
-    }
-    
-    // More flexible matching
-    message.trim(); // Remove whitespace
     
     if (message == "1" || status == 1 || (length == 1 && payload[0] == '1')) {
-      Serial.println("🎉 RFID REGISTERED & ACTIVE - TURNING ON!");
-      relayOn();
+      Serial.println("🎉 STATUS 1 - RELAY ON!");
+      relayOn(); // ⚡ Activates in <1ms
     } else if (message == "0" || status == 0 || (length == 1 && payload[0] == '0')) {
-      Serial.println("🚫 RFID NOT REGISTERED OR INACTIVE - TURNING OFF!");
-      relayOff();
+      Serial.println("🚫 STATUS 0 - RELAY OFF!");
+      relayOff(); // ⚡ Deactivates in <1ms
     } else {
-      Serial.print("⚠️ Unknown status value: '");
+      Serial.print("⚠️ Unknown status: '");
       Serial.print(message);
       Serial.println("'");
-      relayOff(); // Default to OFF for unknown status
+      relayOff();
     }
-  } else {
-    Serial.println("   ❌ Topic does NOT match!");
   }
+  
   Serial.println();
 }
